@@ -3,9 +3,9 @@
 from html import escape
 from math import sqrt
 import datetime
-
+import pytz
 import numpy as np
-
+import csv
 from bokeh.layouts import column
 from bokeh.models import ColumnDataSource
 from bokeh.models.widgets import DataTable, TableColumn, Div, HTMLTemplateFormatter
@@ -17,8 +17,10 @@ from helper import (
     )
 from events import get_logged_events
 
+
 #pylint: disable=consider-using-enumerate,too-many-statements
 
+csv_table_data = {}
 
 def _get_vtol_means_per_mode(vtol_states, timestamps, data):
     """
@@ -96,9 +98,17 @@ def get_info_table_html(ulog, px4_ulog, db_data, vehicle_data, vtol_states):
         airframe_name, airframe_id = airframe_name_tuple
         if len(airframe_name) == 0:
             table_text_left.append(('Airframe', airframe_id))
+
         else:
             table_text_left.append(('Airframe', airframe_name+' <small>('+airframe_id+')</small>'))
+        
+        csv_table_data['Airframe'] = airframe_name
+        csv_table_data['Airframe ID'] = airframe_id
 
+    table_text_left.append(('', '')) # spacing
+    # Say something
+    table_text_left.append(('Description', 'Oh hi!  <small>(small text go brrrrrr)</small>'))
+    table_text_left.append(('', '')) # spacing
 
     # HW & SW
     sys_hardware = ''
@@ -107,6 +117,7 @@ def get_info_table_html(ulog, px4_ulog, db_data, vehicle_data, vtol_states):
         if 'ver_hw_subtype' in ulog.msg_info_dict:
             sys_hardware += ' (' + escape(ulog.msg_info_dict['ver_hw_subtype']) + ')'
         table_text_left.append(('Hardware', sys_hardware))
+        csv_table_data['Hardware'] = sys_hardware
 
     release_str = ulog.get_version_info_str()
     if release_str is None:
@@ -121,17 +132,24 @@ def get_info_table_html(ulog, px4_ulog, db_data, vehicle_data, vtol_states):
     if 'ver_sw' in ulog.msg_info_dict:
         ver_sw = escape(ulog.msg_info_dict['ver_sw'])
         ver_sw_link = 'https://github.com/PX4/Firmware/commit/'+ver_sw
-        table_text_left.append(('Software Version', release_str +
-                                '<a href="'+ver_sw_link+'" target="_blank">'+ver_sw[:8]+'</a>'+
-                                release_str_suffix+branch_info))
+        ver_sw_result = release_str +'<a href="'+ver_sw_link+'" target="_blank">'+ver_sw[:8]+'</a>'+release_str_suffix+branch_info
+        # table_text_left.append(('Software Version', release_str +
+        #                         '<a href="'+ver_sw_link+'" target="_blank">'+ver_sw[:8]+'</a>'+
+        #                         release_str_suffix+branch_info))
+        table_text_left.append(('Software Version', ver_sw_result))
+        csv_table_data['Software Version'] = ver_sw_result
 
     if 'sys_os_name' in ulog.msg_info_dict and 'sys_os_ver_release' in ulog.msg_info_dict:
         os_name = escape(ulog.msg_info_dict['sys_os_name'])
         os_ver = ulog.get_version_info_str('sys_os_ver_release')
         if os_ver is not None:
-            table_text_left.append(('OS Version', os_name + ', ' + os_ver))
+            os_fullname_result = os_name + ', ' + os_ver
+            # table_text_left.append(('OS Version', os_name + ', ' + os_ver))
+            table_text_left.append(('OS Version', os_fullname_result))
+            csv_table_data['OS Version'] = os_fullname_result
 
     table_text_left.append(('Estimator', px4_ulog.get_estimator()))
+    csv_table_data['Estimator'] = px4_ulog.get_estimator()
 
     table_text_left.append(('', '')) # spacing
 
@@ -157,21 +175,44 @@ Log timezone: {}
 SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offset_min)
             tooltip = 'data-toggle="tooltip" data-delay=\'{"show":0, "hide":100}\' '+ \
                 'title="'+tooltip+'" '
+            logging_start_result = '<span style="display:none" id="logging-start-element">'+ str(logging_start_time)+'</span>'
+            # table_text_left.append(
+            #     ('Logging Start '+
+            #      '<i '+tooltip+' class="fa-solid fa-question" aria-hidden="true" '+
+            #      'style="color:#666"></i>',
+            #      '<span style="display:none" id="logging-start-element">'+
+            #      str(logging_start_time)+'</span>'))
             table_text_left.append(
                 ('Logging Start '+
                  '<i '+tooltip+' class="fa-solid fa-question" aria-hidden="true" '+
-                 'style="color:#666"></i>',
-                 '<span style="display:none" id="logging-start-element">'+
-                 str(logging_start_time)+'</span>'))
+                 'style="color:#666"></i>',logging_start_result))
+            
+            # Convert the logging start time to UTC datetime object
+            logging_start_datetime_utc = datetime.datetime.utcfromtimestamp(logging_start_time)
+
+            # Apply the UTC offset using pytz
+            utc_timezone = pytz.timezone('UTC')
+            logging_start_datetime_local = utc_timezone.localize(logging_start_datetime_utc) + datetime.timedelta(minutes=utc_offset_min)
+
+            # Convert to local timezone
+            local_timezone = pytz.timezone('Asia/Bangkok')
+            logging_start_datetime_local = logging_start_datetime_local.astimezone(local_timezone)
+
+            # Format the local time as a string
+            logging_start_formatted = logging_start_datetime_local.strftime('%d-%m-%Y %H:%M')
+            
+            csv_table_data['Logging Start'] = logging_start_formatted
     except:
         # Ignore. Eg. if topic not found
         pass
 
-
     # logging duration
     m, s = divmod(int((ulog.last_timestamp - ulog.start_timestamp)/1e6), 60)
     h, m = divmod(m, 60)
-    table_text_left.append(('Logging Duration', '{:d}:{:02d}:{:02d}'.format(h, m, s)))
+    logging_duration_result = '{:d}:{:02d}:{:02d}'.format(h, m, s)
+    # table_text_left.append(('Logging Duration', '{:d}:{:02d}:{:02d}'.format(h, m, s)))
+    table_text_left.append(('Logging Duration', logging_duration_result))
+    csv_table_data['Logging Duration'] = logging_duration_result
 
     # dropouts
     dropout_durations = [dropout.duration for dropout in ulog.dropouts]
@@ -196,6 +237,7 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
         if m > 0: flight_time_str += '{:d} minutes '.format(m)
         flight_time_str += '{:d} seconds '.format(s)
         table_text_left.append(('Vehicle Life<br/>Flight Time', flight_time_str))
+        csv_table_data['Vehicle Life Flight Time'] = flight_time_str
 
     table_text_left.append(('', '')) # spacing
 
@@ -207,6 +249,7 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             sys_uuid = sys_uuid + ' (' + vehicle_data.name + ')'
         if len(sys_uuid) > 0:
             table_text_left.append(('Vehicle UUID', sys_uuid))
+            csv_table_data['Vehicle UUID'] = sys_uuid
 
 
     table_text_left.append(('', '')) # spacing
@@ -249,27 +292,36 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
                 dz = pos_z[index] - pos_z[last_index]
                 total_dist_m += sqrt(dx*dx + dy*dy + dz*dz)
             last_index = index
+
+        test_distance = total_dist_m + 300 #for test only
+
         if total_dist_m < 1:
             pass # ignore
         elif total_dist_m > 1000:
             table_text_right.append(('Distance', "{:.2f} km".format(total_dist_m/1000)))
+            table_text_right.append(('Distance + 300 m', "{:.2f} km".format(test_distance/1000))) #for test
+            
         else:
-            table_text_right.append(('Distance', "{:.1f} m".format(total_dist_m)))
+            table_text_right.append(('Distance', "{:.2f} m".format(total_dist_m)))
+            table_text_right.append(('Distance + 300 m', "{:.2f} m".format(test_distance))) #for test
+        csv_table_data['Distance (m)'] = total_dist_m
 
         if len(pos_z) > 0:
             max_alt_diff = np.amax(pos_z) - np.amin(pos_z)
             table_text_right.append(('Max Altitude Difference', "{:.0f} m".format(max_alt_diff)))
+            csv_table_data['Max Altitude Distance (m)'] = max_alt_diff
 
         table_text_right.append(('', '')) # spacing
 
         # Speed
         if len(vel_x) > 0:
             max_h_speed = np.amax(np.sqrt(np.square(vel_x) + np.square(vel_y)))
+            ave_h_speed = np.mean(np.sqrt(np.square(vel_x) + np.square(vel_y)))
             speed_vector = np.sqrt(np.square(vel_x) + np.square(vel_y) + np.square(vel_z))
             max_speed = np.amax(speed_vector)
             if vtol_states is None:
                 mean_speed = np.mean(speed_vector)
-                table_text_right.append(('Average Speed', "{:.1f} km/h".format(mean_speed*3.6)))
+                table_text_right.append(('Average Speed', "{:.1f} km/h".format(mean_speed*3.6))) #*3.6 to turn m/s into km/h
             else:
                 local_pos_timestamp = local_pos.data['timestamp'][local_vel_valid_indices]
                 speed_vector = speed_vector.reshape((len(speed_vector),))
@@ -282,18 +334,33 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
                     table_text_right.append(
                         ('Average Speed FW', "{:.1f} km/h".format(mean_speed_fw*3.6)))
             table_text_right.append(('Max Speed', "{:.1f} km/h".format(max_speed*3.6)))
-            table_text_right.append(('Max Speed Horizontal', "{:.1f} km/h".format(max_h_speed*3.6)))
+            table_text_right.append(('Average Speed Horizontal', "{:.1f} km/h".format(ave_h_speed*3.6)))
+            # table_text_right.append(('Max Speed Horizontal', "{:.1f} km/h".format(max_h_speed*3.6)))
             table_text_right.append(('Max Speed Up', "{:.1f} km/h".format(np.amax(-vel_z)*3.6)))
             table_text_right.append(('Max Speed Down', "{:.1f} km/h".format(-np.amin(-vel_z)*3.6)))
+            csv_table_data['Max Speed (km/h)'] = max_speed*3.6
+            csv_table_data['Average Speed Horizontal (km/h)'] = ave_h_speed*3.6
 
             table_text_right.append(('', '')) # spacing
 
+        # RPM 
+        #rpm_data = ulog.get_dataset('rpm',0) for other instance
+        rpm_data = ulog.get_dataset('rpm')
+        rpm_4 = rpm_data.data ['electrical_speed_rpm[4]'] #4th instance
+        max_rpm = np.amax(rpm_4)
+        average_rpm = np.mean(rpm_4)
+        table_text_right.append(('Max RPM ', "{:.2f} ".format(max_rpm)))
+        table_text_right.append(('Average RPM ', "{:.2f} ".format(average_rpm)))
+        csv_table_data['Max RPM'] = max_rpm
+        csv_table_data['Average RPM'] = average_rpm
+
         vehicle_attitude = ulog.get_dataset('vehicle_attitude')
-        roll = vehicle_attitude.data['roll']
+        roll = vehicle_attitude.data['roll'] #?
         pitch = vehicle_attitude.data['pitch']
         if len(roll) > 0:
             # tilt = angle between [0,0,1] and [0,0,1] rotated by roll and pitch
             tilt_angle = np.arccos(np.multiply(np.cos(pitch), np.cos(roll)))*180/np.pi
+            table_text_right.append(('Average Tilt Angle', "{:.1f} deg".format(np.mean(tilt_angle))))
             table_text_right.append(('Max Tilt Angle', "{:.1f} deg".format(np.amax(tilt_angle))))
 
         rollspeed = vehicle_attitude.data['rollspeed']
@@ -362,6 +429,20 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
         ' and thus require an accurate estimator')
     html_tables = ('<p><div style="display: flex; justify-content: space-between;">'+
                    left_table+right_table+'</div></p>')
+
+    #save csv file
+    with open('aircraft_data.csv', 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        
+        # Write the headers
+        csv_writer.writerow(['Title', 'Value'])
+        
+        # Write the data
+        for key, value in csv_table_data.items():
+            csv_writer.writerow([key, value])
+
+    print("Data has been saved")
+    # print(csv_table_data)
 
     return html_tables
 

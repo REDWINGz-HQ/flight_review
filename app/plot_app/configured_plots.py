@@ -184,7 +184,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     x_range_offset = (ulog.last_timestamp - ulog.start_timestamp) * 0.05
     x_range = Range1d(ulog.start_timestamp - x_range_offset, ulog.last_timestamp + x_range_offset)
 
-    # Altitude estimate
+    # Altitude estimate #Yellow
     data_plot = DataPlot(data, plot_config, 'vehicle_gps_position',
                          y_axis_label='[m]', title='Altitude Estimate',
                          changed_params=changed_params, x_range=x_range)
@@ -209,7 +209,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if is_vtol_tailsitter:
         [tailsitter_attitude, tailsitter_rates] = tailsitter_orientation(ulog, vtol_states)
 
-    # Roll/Pitch/Yaw angle & angular rate
+    # Roll/Pitch/Yaw angle & angular rate #Red
     for index, axis in enumerate(['roll', 'pitch', 'yaw']):
         # angle
         axis_name = axis.capitalize()
@@ -280,7 +280,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
 
-    # Local position
+    # Local position #add graph according to selected axis #green
     for axis in ['x', 'y', 'z']:
         data_plot = DataPlot(data, plot_config, 'vehicle_local_position',
                              y_axis_label='[m]', title='Local Position '+axis.upper(),
@@ -296,7 +296,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
 
-    # Velocity
+    # Velocity #green
     data_plot = DataPlot(data, plot_config, 'vehicle_local_position',
                          y_axis_label='[m/s]', title='Velocity',
                          plot_height='small', changed_params=changed_params,
@@ -310,7 +310,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
-    # Visual Odometry (only if topic found)
+    # Visual Odometry (only if topic found) #pass
     if any(elem.name == 'vehicle_visual_odometry' for elem in data):
         # Vision position
         data_plot = DataPlot(data, plot_config, 'vehicle_visual_odometry',
@@ -394,7 +394,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
         if data_plot.finalize() is not None: plots.append(data_plot)
 
-    # Airspeed vs Ground speed: but only if there's valid airspeed data or a VTOL
+    # Airspeed vs Ground speed: but only if there's valid airspeed data or a VTOL #pass
     try:
         if is_vtol or ulog.get_dataset('airspeed') is not None:
             data_plot = DataPlot(data, plot_config, 'vehicle_global_position',
@@ -427,7 +427,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     except (KeyError, IndexError) as error:
         pass
 
-    # TECS (fixed-wing or VTOLs)
+    # TECS (fixed-wing or VTOLs) #pass
     data_plot = DataPlot(data, plot_config, 'tecs_status', y_start=0, title='TECS',
                          y_axis_label='[m/s]', plot_height='small',
                          changed_params=changed_params, x_range=x_range)
@@ -438,7 +438,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
 
-    # manual control inputs
+    # manual control inputs #green
     # prefer the manual_control_setpoint topic. Old logs do not contain it
     if any(elem.name == 'manual_control_setpoint' for elem in data):
         data_plot = DataPlot(data, plot_config, 'manual_control_setpoint',
@@ -457,7 +457,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
         if data_plot.finalize() is not None: plots.append(data_plot)
 
-    else: # it's an old log (COMPATIBILITY)
+    else: # it's an old log (COMPATIBILITY) #pass
         data_plot = DataPlot(data, plot_config, 'rc_channels',
                              title='Raw Radio Control Inputs',
                              plot_height='small', y_range=Range1d(-1.1, 1.1),
@@ -634,7 +634,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
                 if data_plot.finalize() is not None: plots.append(data_plot)
 
-    # raw acceleration
+    # raw acceleration #same instance
     data_plot = DataPlot(data, plot_config, 'sensor_combined',
                          y_axis_label='[m/s^2]', title='Raw Acceleration',
                          plot_height='small', changed_params=changed_params,
@@ -643,28 +643,43 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                          'accelerometer_m_s2[2]'], colors3, ['X', 'Y', 'Z'])
     if data_plot.finalize() is not None: plots.append(data_plot)
 
-    # Vibration Metrics
+    # Vibration Metrics #different instance
+    # data_plot = DataPlot(data, plot_config, 'vehicle_imu_status',
+    #                      title='Vibration Metrics',
+    #                      plot_height='small', changed_params=changed_params,
+    #                      x_range=x_range, y_start=0, topic_instance=0)
+    # data_plot.add_graph(['accel_vibration_metric'], colors8[0:1],
+    #                      ['Accel 0 Vibration Level [m/s^2]'])
+
+    # data_plot.change_dataset('vehicle_imu_status', 1)
+    # data_plot.add_graph(['accel_vibration_metric'], colors8[1:2],
+    #                         ['Accel 1 Vibration Level [m/s^2]'])
+
+    # data_plot.change_dataset('vehicle_imu_status', 0)
+    # data_plot.add_graph(['gyro_vibration_metric'], colors8[2:3],
+    #                         ['Gyro 0 Vibration Level [rad/s]'])
+
+    # data_plot.change_dataset('vehicle_imu_status', 1)
+    # data_plot.add_graph(['gyro_vibration_metric'], colors8[3:4],
+    #                         ['Gyro 1 Vibration Level [rad/s]'])
+
+    # data_plot.add_horizontal_background_boxes(
+    #     ['green', 'orange', 'red'], [4.905, 9.81])
+
+    # if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # Vibration Metrics #same+diff instance
     data_plot = DataPlot(data, plot_config, 'vehicle_imu_status',
                          title='Vibration Metrics',
                          plot_height='small', changed_params=changed_params,
                          x_range=x_range, y_start=0, topic_instance=0)
-    data_plot.add_graph(['accel_vibration_metric'], colors8[0:1],
-                         ['Accel 0 Vibration Level [m/s^2]'])
-
+    data_plot.add_graph(['accel_vibration_metric', lambda data: ('gyro_vibration_metric', (data['gyro_vibration_metric'])*100)],
+                          colors8[0:2], ['Accel 0 Vibration Level[m/s^2]', 'Gyro 0 Vibration Level x100[rad/s]'])
+    
     data_plot.change_dataset('vehicle_imu_status', 1)
-    data_plot.add_graph(['accel_vibration_metric'], colors8[1:2],
-                            ['Accel 1 Vibration Level [m/s^2]'])
-
-    data_plot.change_dataset('vehicle_imu_status', 2)
-    data_plot.add_graph(['accel_vibration_metric'], colors8[2:3],
-                            ['Accel 2 Vibration Level [m/s^2]'])
-
-    data_plot.change_dataset('vehicle_imu_status', 3)
-    data_plot.add_graph(['accel_vibration_metric'], colors8[3:4],
-                            ['Accel 3 Vibration Level [rad/s]'])
-
-    data_plot.add_horizontal_background_boxes(
-        ['green', 'orange', 'red'], [4.905, 9.81])
+    data_plot.add_graph(['accel_vibration_metric', lambda data: ('gyro_vibration_metric', (data['gyro_vibration_metric'])*100)],
+                          colors8[2:4], 
+                          ['Accel 1 Vibration Level[m/s^2]', 'Gyro 1 Vibratvion Level x100[rad/s]'])
 
     if data_plot.finalize() is not None: plots.append(data_plot)
 
@@ -987,7 +1002,22 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     except:
         pass
 
-
+    # Electrical Speed RPM 
+    data_plot = DataPlot(data, plot_config, 'rpm',
+                         title='Electrical Speed RPM',y_axis_label='[rpm]',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, y_start=0, topic_instance=0)
+    data_plot.add_graph(['electrical_speed_rpm[0]', 'electrical_speed_rpm[1]'
+                         , 'electrical_speed_rpm[2]', 'electrical_speed_rpm[3]'
+                         , 'electrical_speed_rpm[4]'
+                         ], colors8[0:5], ['Electrical SPD RPM 0'
+                                           , 'Electrical SPD RPM 1'
+                                           , 'Electrical SPD RPM 2'
+                                           , 'Electrical SPD RPM 3'
+                                           , 'Electrical SPD RPM 4'])
+    
+    if data_plot.finalize() is not None: plots.append(data_plot)
+    
 
     # exchange all DataPlot's with the bokeh_plot and handle parameter changes
 
@@ -1039,7 +1069,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
 
     # changed parameters
-    plots.append(get_changed_parameters(ulog, plot_width))
+    #plots.append(get_changed_parameters(ulog, plot_width))
 
 
 

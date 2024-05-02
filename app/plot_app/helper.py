@@ -71,7 +71,6 @@ def get_log_filename(log_id):
         return log_id
     return os.path.join(get_log_filepath(), log_id + '.ulg')
 
-
 __last_failed_downloads = {} # dict with key=file name and a timestamp of last failed download
 
 def download_file_maybe(filename, url):
@@ -293,7 +292,7 @@ def load_ulog_file(file_name):
     # The reason to put this method into helper is that the main module gets
     # (re)loaded on each page request. Thus the caching would not work there.
 
-    # load only the messages we really need
+    #load only the messages we really need
     msg_filter = ['battery_status', 'distance_sensor', 'estimator_status',
                   'sensor_combined', 'cpuload',
                   'vehicle_gps_position', 'vehicle_local_position',
@@ -312,7 +311,13 @@ def load_ulog_file(file_name):
                   'ekf2_timestamps', 'manual_control_switches', 'event',
                   'vehicle_imu_status', 'actuator_motors', 'actuator_servos',
                   'vehicle_thrust_setpoint', 'vehicle_torque_setpoint',
-                  'failsafe_flags']
+                  'failsafe_flags', 'rpm']
+
+    # msg_filter = [
+    #               'vehicle_local_position', 'vehicle_local_position_setpoint', 
+    #               'rpm', 'vehicle_imu_status'
+    #               ]
+        
     try:
         ulog = ULog(file_name, msg_filter, disable_str_exceptions=False)
     except FileNotFoundError:
@@ -453,7 +458,7 @@ def get_airframe_name(ulog, multi_line=False):
 
         airframe_type = ''
         if multi_line:
-            separator = '<br>'
+            separator = '<br>' #new line?
         else:
             separator = ', '
         if 'type' in airframe_data:
