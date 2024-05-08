@@ -10,6 +10,9 @@ from bokeh.layouts import column
 from bokeh.models import ColumnDataSource
 from bokeh.models.widgets import DataTable, TableColumn, Div, HTMLTemplateFormatter
 
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+
 from config import plot_color_red
 from helper import (
     get_default_parameters, get_airframe_name,
@@ -430,22 +433,41 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
     html_tables = ('<p><div style="display: flex; justify-content: space-between;">'+
                    left_table+right_table+'</div></p>')
 
+    save_csv_file()
+
+    save_pdf_file()
+
+    return html_tables
+
+def save_csv_file():
     #save csv file
     with open('aircraft_data.csv', 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         
-        # Write the headers
-        csv_writer.writerow(['Title', 'Value'])
+        csv_writer.writerow(['Title', 'Value']) # write the headers
         
-        # Write the data
-        for key, value in csv_table_data.items():
+        for key, value in csv_table_data.items(): # write the data from dict
             csv_writer.writerow([key, value])
 
-    print("Data has been saved")
-    # print(csv_table_data)
+    print("CSV data has been saved")
+    return None
 
-    return html_tables
+def save_pdf_file():
+    #save pdf file
+    pdf_file = canvas.Canvas("aircraft_data.pdf", pagesize=A4)
+    font_size = 8
+    pdf_file.setFont("Helvetica", font_size)    
+    
+    y_coordinate = A4[1]-50 #set start position 841.89-50 points (1 inch = 72 pts)
 
+    for key, value in csv_table_data.items(): #loop for adding text from dict
+        text = f"{key}: {value}"
+        pdf_file.drawString(50, y_coordinate, text)
+        y_coordinate -= 15  # Move to the next line
+
+    pdf_file.save()
+    print("PDF data has been saved")
+    return None
 
 def get_error_labels_html():
     """

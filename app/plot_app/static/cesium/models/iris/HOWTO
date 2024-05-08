@@ -4,6 +4,7 @@ howto modify model
   -> modify
 - export as collada (iris.dae)
 - zip iris.zip 1_Cesium_Air_Prop.png iris.dae
-- convert to glTF: open iris.zip in http://52.4.31.236/convertmodel.html
+- convert to glTF: open iris.zip in http://52.4.31.236/convertmodel.html #not working anymore?
+- convert to glTF: try convert zip to gltf converter site
 - save as iris.glb
 
