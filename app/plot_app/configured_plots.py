@@ -1018,6 +1018,91 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     
     if data_plot.finalize() is not None: plots.append(data_plot)
     
+    # UAVCAN servo status position 
+    data_plot = DataPlot(data, plot_config, 'servo_status',
+                         title='Servo Position[0]',y_axis_label='[up and down]',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, y_start=0, topic_instance=0)
+    # data_plot.add_graph(['servo[0].servo_position'], colors8[0:1], ['Servo Position']) #show [-60,60]
+    data_plot.add_graph([lambda data: ('servo[0].servo_position',
+                                       (data['servo[0].servo_position']/60))],
+                                       colors8[0:1], ['Servo Position[0]'])
+    data_plot.add_graph(['servo[1].servo_position'], colors8[5:6], ['Servo Position[1]'])
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # UAVCAN servo status speed 
+    data_plot = DataPlot(data, plot_config, 'servo_status',
+                         title='Servo Speed[0]',y_axis_label='[Speed]',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, y_start=0, topic_instance=0)
+    data_plot.add_graph(['servo[0].servo_speed'], colors8[1:2], ['Servo Speed[0]']) 
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # UAVCAN servo status current 
+    data_plot = DataPlot(data, plot_config, 'servo_power_status',
+                         title='Servo Current[0]',y_axis_label='[Current]',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, y_start=0, topic_instance=0)
+    data_plot.add_graph(['servo_power[0].servo_power_current'], colors8[2:3], ['Servo Current']) 
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # UAVCAN servo status temperature 
+    data_plot = DataPlot(data, plot_config, 'servo_temp_status',
+                         title='Servo Temp[0]',y_axis_label='[Temp]',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range, y_start=0, topic_instance=0)
+    data_plot.add_graph(['servo_temp[0].servo_temp_temperature'], colors8[3:4], ['Servo Temp']) 
+
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # servo flags
+    try:
+        data_plot = DataPlot(data, plot_config, 'servo_power_status',
+                             y_start=0, title='Servo Flags',
+                             plot_height='small', changed_params=changed_params,
+                             x_range=x_range)
+        servo_status = ulog.get_dataset('servo_power_status').data
+
+        plot_data = []
+        plot_labels = []
+        input_data = [
+            ('Test Health Flags (vel, pos, hgt)', servo_status['servo_power[0].servo_power_error_flags']),
+            ('Test Timeout Flags (vel, pos, hgt)', servo_status['servo_power[0].servo_power_error_flags']),
+            ('Test Velocity Check Bit', (servo_status['servo_power[0].servo_power_error_flags'])&0x1),
+            ('Test Horizontal Position Check Bit', (servo_status['servo_power[0].servo_power_error_flags']>>1)&1),
+            ('Test Vertical Position Check Bit', (servo_status['servo_power[0].servo_power_error_flags']>>2)&1),
+            ('Test Mag X, Y, Z Check Bits', (servo_status['servo_power[0].servo_power_error_flags']>>3)&0x7),
+            ('Test Yaw Check Bit', (servo_status['servo_power[0].servo_power_error_flags']>>6)&1),
+            ('Test Airspeed Check Bit', (servo_status['servo_power[0].servo_power_error_flags']>>7)&1),
+            ('Test Synthetic Sideslip Check Bit', (servo_status['servo_power[0].servo_power_error_flags']>>8)&1),
+            ('Test Height to Ground Check Bit', (servo_status['servo_power[0].servo_power_error_flags']>>9)&1),
+            ('Test Optical Flow X, Y Check Bits', (servo_status['servo_power[0].servo_power_error_flags']>>10)&0x3),
+            ]
+        # filter: show only the flags that have non-zero samples
+        for cur_label, cur_data in input_data:
+            if np.amax(cur_data) > 0.1:
+                data_label = 'flags_'+str(len(plot_data)) # just some unique string
+                plot_data.append(lambda d, data=cur_data, label=data_label: (label, data))
+                plot_labels.append(cur_label)
+                if len(plot_data) >= 8: # cannot add more than that
+                    break
+
+        if len(plot_data) == 0:
+            # add the plot even in the absence of any problem, so that the user
+            # can validate that (otherwise it's ambiguous: it could be that the
+            # estimator_status topic is not logged)
+            plot_data = [lambda d: ('flags', input_data[0][1])]
+            plot_labels = [input_data[0][0]]
+        data_plot.add_graph(plot_data, colors8[0:len(plot_data)], plot_labels)
+        if data_plot.finalize() is not None: plots.append(data_plot)
+    except (KeyError, IndexError) as error:
+        print('Error in estimator plot: '+str(error))
+
+
+
 
     # exchange all DataPlot's with the bokeh_plot and handle parameter changes
 

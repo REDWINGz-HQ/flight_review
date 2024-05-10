@@ -311,7 +311,7 @@ def load_ulog_file(file_name):
                   'ekf2_timestamps', 'manual_control_switches', 'event',
                   'vehicle_imu_status', 'actuator_motors', 'actuator_servos',
                   'vehicle_thrust_setpoint', 'vehicle_torque_setpoint',
-                  'failsafe_flags', 'rpm']
+                  'failsafe_flags', 'rpm', 'servo_status', 'servo_power_status', 'servo_temp_status']
 
     # msg_filter = [
     #               'vehicle_local_position', 'vehicle_local_position_setpoint', 

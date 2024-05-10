@@ -1,5 +1,5 @@
 """ methods to generate various tables used in configured_plots.py """
-
+import os
 from html import escape
 from math import sqrt
 import datetime
@@ -318,7 +318,7 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
 
         # Speed
         if len(vel_x) > 0:
-            max_h_speed = np.amax(np.sqrt(np.square(vel_x) + np.square(vel_y)))
+            #max_h_speed = np.amax(np.sqrt(np.square(vel_x) + np.square(vel_y)))
             ave_h_speed = np.mean(np.sqrt(np.square(vel_x) + np.square(vel_y)))
             speed_vector = np.sqrt(np.square(vel_x) + np.square(vel_y) + np.square(vel_z))
             max_speed = np.amax(speed_vector)
@@ -341,21 +341,38 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             # table_text_right.append(('Max Speed Horizontal', "{:.1f} km/h".format(max_h_speed*3.6)))
             table_text_right.append(('Max Speed Up', "{:.1f} km/h".format(np.amax(-vel_z)*3.6)))
             table_text_right.append(('Max Speed Down', "{:.1f} km/h".format(-np.amin(-vel_z)*3.6)))
-            csv_table_data['Max Speed (km/h)'] = max_speed*3.6
-            csv_table_data['Average Speed Horizontal (km/h)'] = ave_h_speed*3.6
+            # csv_table_data['Max Speed (km/h)'] = max_speed*3.6
+            # csv_table_data['Average Speed Horizontal (km/h)'] = ave_h_speed*3.6
 
             table_text_right.append(('', '')) # spacing
 
         # RPM 
-        #rpm_data = ulog.get_dataset('rpm',0) for other instance
-        rpm_data = ulog.get_dataset('rpm')
-        rpm_4 = rpm_data.data ['electrical_speed_rpm[4]'] #4th instance
-        max_rpm = np.amax(rpm_4)
-        average_rpm = np.mean(rpm_4)
-        table_text_right.append(('Max RPM ', "{:.2f} ".format(max_rpm)))
-        table_text_right.append(('Average RPM ', "{:.2f} ".format(average_rpm)))
-        csv_table_data['Max RPM'] = max_rpm
-        csv_table_data['Average RPM'] = average_rpm
+        if any(elem.name == 'rpm' for elem in ulog.data_list):
+            #rpm_data = ulog.get_dataset('rpm',0) # for other instance
+            rpm_data = ulog.get_dataset('rpm')
+            rpm_4 = rpm_data.data ['electrical_speed_rpm[4]'] #4th instance
+            max_rpm = np.amax(rpm_4)
+            average_rpm = np.mean(rpm_4)
+            table_text_right.append(('Max RPM ', "{:.2f} ".format(max_rpm)))
+            table_text_right.append(('Average RPM ', "{:.2f} ".format(average_rpm)))
+            csv_table_data['Max RPM'] = max_rpm
+            csv_table_data['Average RPM'] = average_rpm
+        else:
+            pass
+
+        #Servo
+        if any(elem.name == 'servo_status' for elem in ulog.data_list):
+            servo_data = ulog.get_dataset('servo_status')
+            servo_force = servo_data.data ['servo[0].servo_force']
+            max_servo_force = np.amax(servo_force)
+            average_servo_force = np.mean(servo_force)
+            table_text_right.append(('Max Servo Force ', "{:.2f} N".format(max_servo_force)))
+            table_text_right.append(('Average Servo Force ', "{:.2f} N".format(average_servo_force)))
+            csv_table_data['Max Servo Force'] = max_servo_force
+            csv_table_data['Average Servo Force'] = average_servo_force
+        else:
+            pass
+
 
         vehicle_attitude = ulog.get_dataset('vehicle_attitude')
         roll = vehicle_attitude.data['roll'] #?
@@ -432,16 +449,22 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
         ' and thus require an accurate estimator')
     html_tables = ('<p><div style="display: flex; justify-content: space-between;">'+
                    left_table+right_table+'</div></p>')
+    # Save 
+    saved_log_path = os.path.expanduser('~/Flight_review_git/flight_review/app/saved_log/')
+    if any(elem.name == 'vehicle_gps_position' for elem in ulog.data_list):
+        save_name = saved_log_path + logging_start_formatted
+    else:
+        save_name = saved_log_path + 'no_date_display'
 
-    save_csv_file()
+    save_csv_file(save_name)
 
-    save_pdf_file()
+    save_pdf_file(save_name)
 
     return html_tables
 
-def save_csv_file():
+def save_csv_file(saved_name):
     #save csv file
-    with open('aircraft_data.csv', 'w', newline='') as csvfile:
+    with open(saved_name +'.csv', 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         
         csv_writer.writerow(['Title', 'Value']) # write the headers
@@ -449,14 +472,14 @@ def save_csv_file():
         for key, value in csv_table_data.items(): # write the data from dict
             csv_writer.writerow([key, value])
 
-    print("CSV data has been saved")
+    print('CSV data has been saved')
     return None
 
-def save_pdf_file():
+def save_pdf_file(saved_name):
     #save pdf file
-    pdf_file = canvas.Canvas("aircraft_data.pdf", pagesize=A4)
+    pdf_file = canvas.Canvas(saved_name + '.pdf', pagesize=A4)
     font_size = 8
-    pdf_file.setFont("Helvetica", font_size)    
+    pdf_file.setFont('Helvetica', font_size)    
     
     y_coordinate = A4[1]-50 #set start position 841.89-50 points (1 inch = 72 pts)
 
@@ -466,7 +489,7 @@ def save_pdf_file():
         y_coordinate -= 15  # Move to the next line
 
     pdf_file.save()
-    print("PDF data has been saved")
+    print('PDF data has been saved')
     return None
 
 def get_error_labels_html():
