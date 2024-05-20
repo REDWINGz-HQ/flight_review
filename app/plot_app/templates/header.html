@@ -102,4 +102,38 @@
 </nav>
 
     <div class="content">
+<!-- <script>
+	// Function to trigger the download
+	function triggerDownload(downloadUrl) {
+		var link = document.createElement('a');
+		link.href = downloadUrl;
+		link.setAttribute('download', '');
+		link.click();
+	}
 
+	// Automatically trigger download when the page loads
+	window.addEventListener('load', function() {
+		triggerDownload('download?log={{ log_id }}&type=2');
+	});
+</script> -->
+
+<script>
+    // Function to trigger the download
+    function triggerDownload(downloadUrl) {
+        var link = document.createElement('a');
+        link.href = downloadUrl;
+        link.setAttribute('download', '');
+        link.click();
+    }
+
+    // Automatically trigger downloads when the page loads
+    window.addEventListener('load', function() {
+        // Download the log file
+        triggerDownload('download?log={{ log_id }}');
+
+        // Wait for 2 seconds before downloading the KML file
+        setTimeout(function() {
+            triggerDownload('download?log={{ log_id }}&type=2');
+        }, 2000); // 2000 milliseconds = 2 seconds
+    });
+</script>

@@ -13,7 +13,7 @@ from bokeh.models.widgets import DataTable, TableColumn, Div, HTMLTemplateFormat
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-from config import plot_color_red
+from config import plot_color_red, get_kml_filepath
 from helper import (
     get_default_parameters, get_airframe_name,
     get_total_flight_time, error_labels_table
@@ -29,7 +29,7 @@ def _get_vtol_means_per_mode(vtol_states, timestamps, data):
     """
     get the mean values separated by MC and FW mode for some
     data vector
-    :return: tuple of (mean mc, mean fw)
+    :return: tuple of (mean mc, mean fw, max_mc, max_fw)
     """
     vtol_state_index = 0
     current_vtol_state = -1
@@ -37,6 +37,8 @@ def _get_vtol_means_per_mode(vtol_states, timestamps, data):
     counter_mc = 0
     sum_fw = 0
     counter_fw = 0
+    max_mc = 0
+    max_fw = 0
     for i in range(len(timestamps)):
         if timestamps[i] > vtol_states[vtol_state_index][0]:
             current_vtol_state = vtol_states[vtol_state_index][1]
@@ -44,15 +46,22 @@ def _get_vtol_means_per_mode(vtol_states, timestamps, data):
         if current_vtol_state == 2: # FW
             sum_fw += data[i]
             counter_fw += 1
+            if data[i] > max_fw:
+                max_fw = data[i]
         elif current_vtol_state == 3: # MC
             sum_mc += data[i]
             counter_mc += 1
+            if data[i] > max_mc:
+                max_mc = data[i]
     mean_mc = None
-    if counter_mc > 0: mean_mc = sum_mc / counter_mc
+    if counter_mc > 0: 
+        mean_mc = sum_mc / counter_mc
+        max_mc = max_mc
     mean_fw = None
-    if counter_fw > 0: mean_fw = sum_fw / counter_fw
-    return (mean_mc, mean_fw)
-
+    if counter_fw > 0: 
+        mean_fw = sum_fw / counter_fw
+        max_fw = max_fw
+    return (mean_mc, mean_fw, max_mc, max_fw)
 
 def get_heading_html(ulog, px4_ulog, db_data, link_to_3d_page,
                      additional_links=None, title_suffix=''):
@@ -104,13 +113,13 @@ def get_info_table_html(ulog, px4_ulog, db_data, vehicle_data, vtol_states):
 
         else:
             table_text_left.append(('Airframe', airframe_name+' <small>('+airframe_id+')</small>'))
-        
-        csv_table_data['Airframe'] = airframe_name
+        if '<br>' in airframe_name:
+            cleaned_airframe_name = airframe_name.replace('<br>', ', ')
+        else:
+            cleaned_airframe_name = airframe_name
+        csv_table_data['Airframe'] = cleaned_airframe_name
         csv_table_data['Airframe ID'] = airframe_id
 
-    table_text_left.append(('', '')) # spacing
-    # Say something
-    table_text_left.append(('Description', 'Oh hi!  <small>(small text go brrrrrr)</small>'))
     table_text_left.append(('', '')) # spacing
 
     # HW & SW
@@ -130,24 +139,23 @@ def get_info_table_html(ulog, px4_ulog, db_data, vehicle_data, vtol_states):
         release_str += ' <small>('
         release_str_suffix = ')</small>'
     branch_info = ''
+    branch_name = ''
     if 'ver_sw_branch' in ulog.msg_info_dict:
-        branch_info = '<br> branch: '+ulog.msg_info_dict['ver_sw_branch']
+        branch_name = ulog.msg_info_dict['ver_sw_branch']
+        branch_info = '<br> branch: '+ branch_name
     if 'ver_sw' in ulog.msg_info_dict:
         ver_sw = escape(ulog.msg_info_dict['ver_sw'])
         ver_sw_link = 'https://github.com/PX4/Firmware/commit/'+ver_sw
         ver_sw_result = release_str +'<a href="'+ver_sw_link+'" target="_blank">'+ver_sw[:8]+'</a>'+release_str_suffix+branch_info
-        # table_text_left.append(('Software Version', release_str +
-        #                         '<a href="'+ver_sw_link+'" target="_blank">'+ver_sw[:8]+'</a>'+
-        #                         release_str_suffix+branch_info))
+        ver_sw_saved_result = ver_sw[:8] + ', ' + branch_name
         table_text_left.append(('Software Version', ver_sw_result))
-        csv_table_data['Software Version'] = ver_sw_result
+        csv_table_data['Software Version'] = ver_sw_saved_result
 
     if 'sys_os_name' in ulog.msg_info_dict and 'sys_os_ver_release' in ulog.msg_info_dict:
         os_name = escape(ulog.msg_info_dict['sys_os_name'])
         os_ver = ulog.get_version_info_str('sys_os_ver_release')
         if os_ver is not None:
             os_fullname_result = os_name + ', ' + os_ver
-            # table_text_left.append(('OS Version', os_name + ', ' + os_ver))
             table_text_left.append(('OS Version', os_fullname_result))
             csv_table_data['OS Version'] = os_fullname_result
 
@@ -213,9 +221,9 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
     m, s = divmod(int((ulog.last_timestamp - ulog.start_timestamp)/1e6), 60)
     h, m = divmod(m, 60)
     logging_duration_result = '{:d}:{:02d}:{:02d}'.format(h, m, s)
-    # table_text_left.append(('Logging Duration', '{:d}:{:02d}:{:02d}'.format(h, m, s)))
+    logging_duration_saved_result = '{:d}:{:02d}:{:02d}'.format(h, m, s)   
     table_text_left.append(('Logging Duration', logging_duration_result))
-    csv_table_data['Logging Duration'] = logging_duration_result
+    csv_table_data['Logging Duration'] = logging_duration_saved_result
 
     # dropouts
     dropout_durations = [dropout.duration for dropout in ulog.dropouts]
@@ -296,23 +304,19 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
                 total_dist_m += sqrt(dx*dx + dy*dy + dz*dz)
             last_index = index
 
-        test_distance = total_dist_m + 300 #for test only
-
         if total_dist_m < 1:
             pass # ignore
         elif total_dist_m > 1000:
             table_text_right.append(('Distance', "{:.2f} km".format(total_dist_m/1000)))
-            table_text_right.append(('Distance + 300 m', "{:.2f} km".format(test_distance/1000))) #for test
             
         else:
             table_text_right.append(('Distance', "{:.2f} m".format(total_dist_m)))
-            table_text_right.append(('Distance + 300 m', "{:.2f} m".format(test_distance))) #for test
-        csv_table_data['Distance (m)'] = total_dist_m
+        csv_table_data['Distance (m)'] = '{:.2f}'.format(total_dist_m)
 
         if len(pos_z) > 0:
             max_alt_diff = np.amax(pos_z) - np.amin(pos_z)
             table_text_right.append(('Max Altitude Difference', "{:.0f} m".format(max_alt_diff)))
-            csv_table_data['Max Altitude Distance (m)'] = max_alt_diff
+            csv_table_data['Max Altitude Distance (m)'] = '{:.0f}'.format(max_alt_diff)
 
         table_text_right.append(('', '')) # spacing
 
@@ -325,23 +329,29 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             if vtol_states is None:
                 mean_speed = np.mean(speed_vector)
                 table_text_right.append(('Average Speed', "{:.1f} km/h".format(mean_speed*3.6))) #*3.6 to turn m/s into km/h
+                table_text_right.append(('Max Speed', "{:.1f} km/h".format(max_speed*3.6)))
+                csv_table_data['Average Speed (km/h)'] = '{:.2f}'.format(mean_speed*3.6)
+                csv_table_data['Max Speed (km/h)'] = '{:.2f}'.format(max_speed*3.6)
             else:
                 local_pos_timestamp = local_pos.data['timestamp'][local_vel_valid_indices]
                 speed_vector = speed_vector.reshape((len(speed_vector),))
-                mean_speed_mc, mean_speed_fw = _get_vtol_means_per_mode(
+                mean_speed_mc, mean_speed_fw, max_speed_mc, max_speed_fw = _get_vtol_means_per_mode(
                     vtol_states, local_pos_timestamp, speed_vector)
                 if mean_speed_mc is not None:
-                    table_text_right.append(
-                        ('Average Speed MC', "{:.1f} km/h".format(mean_speed_mc*3.6)))
+                    table_text_right.append(('Average Speed MC', "{:.1f} km/h".format(mean_speed_mc*3.6)))
+                    table_text_right.append(('Max Speed MC', "{:.1f} km/h".format(max_speed_mc*3.6)))
+                    csv_table_data['Average Speed MC (km/h)'] = '{:.2f}'.format(mean_speed_mc*3.6)
+                    csv_table_data['Max Speed MC (km/h)'] = '{:.2f}'.format(max_speed_mc*3.6)
                 if mean_speed_fw is not None:
-                    table_text_right.append(
-                        ('Average Speed FW', "{:.1f} km/h".format(mean_speed_fw*3.6)))
-            table_text_right.append(('Max Speed', "{:.1f} km/h".format(max_speed*3.6)))
-            table_text_right.append(('Average Speed Horizontal', "{:.1f} km/h".format(ave_h_speed*3.6)))
+                    table_text_right.append(('Average Speed FW', "{:.1f} km/h".format(mean_speed_fw*3.6)))
+                    table_text_right.append(('Max Speed FW', "{:.1f} km/h".format(max_speed_fw*3.6)))
+                    csv_table_data['Average Speed FW (km/h)'] = '{:.2f}'.format(mean_speed_fw*3.6)
+                    csv_table_data['Average Speed FW (km/h)'] = '{:.2f}'.format(max_speed_fw*3.6)
+            
+            # table_text_right.append(('Average Speed Horizontal', "{:.1f} km/h".format(ave_h_speed*3.6)))
             # table_text_right.append(('Max Speed Horizontal', "{:.1f} km/h".format(max_h_speed*3.6)))
-            table_text_right.append(('Max Speed Up', "{:.1f} km/h".format(np.amax(-vel_z)*3.6)))
-            table_text_right.append(('Max Speed Down', "{:.1f} km/h".format(-np.amin(-vel_z)*3.6)))
-            # csv_table_data['Max Speed (km/h)'] = max_speed*3.6
+            # table_text_right.append(('Max Speed Up', "{:.1f} km/h".format(np.amax(-vel_z)*3.6)))
+            # table_text_right.append(('Max Speed Down', "{:.1f} km/h".format(-np.amin(-vel_z)*3.6)))
             # csv_table_data['Average Speed Horizontal (km/h)'] = ave_h_speed*3.6
 
             table_text_right.append(('', '')) # spacing
@@ -353,10 +363,10 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             rpm_4 = rpm_data.data ['electrical_speed_rpm[4]'] #4th instance
             max_rpm = np.amax(rpm_4)
             average_rpm = np.mean(rpm_4)
-            table_text_right.append(('Max RPM ', "{:.2f} ".format(max_rpm)))
-            table_text_right.append(('Average RPM ', "{:.2f} ".format(average_rpm)))
-            csv_table_data['Max RPM'] = max_rpm
-            csv_table_data['Average RPM'] = average_rpm
+            # table_text_right.append(('Max RPM ', "{:.2f} ".format(max_rpm)))
+            # table_text_right.append(('Average RPM ', "{:.2f} ".format(average_rpm)))
+            csv_table_data['Max RPM'] = '{:.2f}'.format(max_rpm)
+            csv_table_data['Average RPM'] = '{:.2f}'.format(average_rpm)
         else:
             pass
 
@@ -366,54 +376,73 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
             servo_force = servo_data.data ['servo[0].servo_force']
             max_servo_force = np.amax(servo_force)
             average_servo_force = np.mean(servo_force)
-            table_text_right.append(('Max Servo Force ', "{:.2f} N".format(max_servo_force)))
-            table_text_right.append(('Average Servo Force ', "{:.2f} N".format(average_servo_force)))
-            csv_table_data['Max Servo Force'] = max_servo_force
-            csv_table_data['Average Servo Force'] = average_servo_force
+            # table_text_right.append(('Max Servo Force ', "{:.2f} N".format(max_servo_force)))
+            # table_text_right.append(('Average Servo Force ', "{:.2f} N".format(average_servo_force)))
+            csv_table_data['Max Servo Force'] = '{:.2f}'.format(max_servo_force)
+            csv_table_data['Average Servo Force'] = '{:.2f}'.format(average_servo_force)
         else:
             pass
 
 
+
         vehicle_attitude = ulog.get_dataset('vehicle_attitude')
-        roll = vehicle_attitude.data['roll'] #?
+        roll = vehicle_attitude.data['roll'] 
         pitch = vehicle_attitude.data['pitch']
         if len(roll) > 0:
             # tilt = angle between [0,0,1] and [0,0,1] rotated by roll and pitch
             tilt_angle = np.arccos(np.multiply(np.cos(pitch), np.cos(roll)))*180/np.pi
-            table_text_right.append(('Average Tilt Angle', "{:.1f} deg".format(np.mean(tilt_angle))))
-            table_text_right.append(('Max Tilt Angle', "{:.1f} deg".format(np.amax(tilt_angle))))
+            # table_text_right.append(('Average Tilt Angle', "{:.1f} deg".format(np.mean(tilt_angle))))
+            # table_text_right.append(('Max Tilt Angle', "{:.1f} deg".format(np.amax(tilt_angle))))
+            csv_table_data['Average Tilt Angle (deg)'] = '{:.2f}'.format(np.mean(tilt_angle))
+            csv_table_data['Max Tilt Angle (deg)'] = '{:.2f}'.format(np.amax(tilt_angle))
 
-        rollspeed = vehicle_attitude.data['rollspeed']
-        pitchspeed = vehicle_attitude.data['pitchspeed']
-        yawspeed = vehicle_attitude.data['yawspeed']
-        if len(rollspeed) > 0:
-            max_rot_speed = np.amax(np.sqrt(np.square(rollspeed) +
-                                            np.square(pitchspeed) +
-                                            np.square(yawspeed)))
-            table_text_right.append(('Max Rotation Speed', "{:.1f} deg/s".format(
-                max_rot_speed*180/np.pi)))
+        # Bug if uncomment, the plot command under this will not working
+        # rollspeed = vehicle_attitude.data['rollspeed']
+        # pitchspeed = vehicle_attitude.data['pitchspeed']
+        # yawspeed = vehicle_attitude.data['yawspeed']
+        # if len(rollspeed) > 0:
+        #     max_rot_speed = np.amax(np.sqrt(np.square(rollspeed) +
+        #                                     np.square(pitchspeed) +
+        #                                     np.square(yawspeed)))
+        #     # table_text_right.append(('Max Rotation Speed', "{:.1f} deg/s".format(
+        #     #     max_rot_speed*180/np.pi)))
+        #     csv_table_data['Max Rotation Speed (deg/s)'] = max_rot_speed*180/np.pi
 
-        table_text_right.append(('', '')) # spacing
-
-        battery_status = ulog.get_dataset('battery_status')
-        battery_current = battery_status.data['current_a']
-        if len(battery_current) > 0:
+        #Battery Current and voltage
+        count_battery = sum(1 for n in ulog.data_list if n.name == 'battery_status')
+        for i in range (count_battery): #len battery_status instance
+            battery_status = ulog.get_dataset('battery_status',i)
+            battery_current = battery_status.data['current_a']
+            battery_voltage = battery_status.data['voltage_v']
             max_current = np.amax(battery_current)
-            if max_current > 0.1:
+            if len(battery_current) > 0 and np.mean(battery_current) > 1:
                 if vtol_states is None:
                     mean_current = np.mean(battery_current)
-                    table_text_right.append(('Average Current', "{:.1f} A".format(mean_current)))
+                    table_text_right.append(('Avg/Max Current', "{:.1f}/ {:.1f} A ".format(mean_current,max_current)))
+                    csv_table_data['Average Current (A)'] = mean_current
+                    csv_table_data['Max Current (A)'] = max_current
                 else:
-                    mean_current_mc, mean_current_fw = _get_vtol_means_per_mode(
+                    mean_current_mc, mean_current_fw, max_current_mc, max_current_fw = _get_vtol_means_per_mode(
                         vtol_states, battery_status.data['timestamp'], battery_current)
                     if mean_current_mc is not None:
                         table_text_right.append(
-                            ('Average Current MC', "{:.1f} A".format(mean_current_mc)))
+                            ('Avg/Max Current MC', "{:.1f}/ {:.1f} A".format(mean_current_mc,max_current_mc)))
+                        csv_table_data['Average Current MC (A)'] = '{:.2f}'.format(mean_current_mc)
+                        csv_table_data['Max Current MC (A)'] = '{:.2f}'.format(max_current_mc)
                     if mean_current_fw is not None:
                         table_text_right.append(
-                            ('Average Current FW', "{:.1f} A".format(mean_current_fw)))
+                            ('Avg/Max Current FW', "{:.1f}/ {:.1f} A".format(mean_current_fw,max_current_fw)))
+                        csv_table_data['Average Current FW (A)'] = '{:.2f}'.format(mean_current_fw)
+                        csv_table_data['Max Current FW (A)'] = '{:.2f}'.format(max_current_fw)
 
-                table_text_right.append(('Max Current', "{:.1f} A".format(max_current)))
+                begin_voltage = battery_voltage[0]
+                end_voltage = battery_voltage[-1]
+                table_text_right.append(
+                    ('Begin/End Voltage', "{:.1f}/ {:.1f} V".format(begin_voltage,end_voltage)))
+                csv_table_data['Begin Voltage (V)'] = '{:.2f}'.format(begin_voltage)
+                csv_table_data['End Voltage (V)'] = '{:.2f}'.format(end_voltage)
+
+
     except:
         pass # ignore (e.g. if topic not found)
 
@@ -442,7 +471,7 @@ SDLOG_UTC_OFFSET: {}'''.format(utctimestamp.strftime('%d-%m-%Y %H:%M'), utc_offs
                 padding_text = ''
         return table + '</table>'
 
-    left_table = generate_html_table(table_text_left, max_width='65%')
+    left_table = generate_html_table(table_text_left, max_width='65%') #65
     right_table = generate_html_table(
         table_text_right,
         'Note: most of these values are based on estimations from the vehicle,'
